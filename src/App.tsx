@@ -60,10 +60,10 @@ export default function App() {
     setSystemError(null);
 
     try {
-      const response = await fetch("/api/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+      const response = await import { GoogleGenAI } from "@google/genai";
+
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const response = await ai.models.generateContent({ ... });,
       });
 
       if (!response.ok) {
