@@ -1,0 +1,6 @@
+{
+  "name": "Patent Overlap Evaluator",
+  "description": "An interactive workspace for patent professionals and senior prior art analysts to parse claims, perform element-by-element evidence mapping, and synthesize rigorous strength judgments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
