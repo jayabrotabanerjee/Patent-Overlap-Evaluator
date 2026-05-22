@@ -60,11 +60,18 @@ export default function App() {
     setSystemError(null);
 
     try {
-      const response = await import { GoogleGenAI } from "@google/genai";
+      const { GoogleGenAI } = await import("@google/genai");
 
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-const response = await ai.models.generateContent({ ... });,
-      });
+const response = await ai.models.generateContent({
+  model: "gemini-1.5-flash",
+  contents: [{
+    role: "user",
+    parts: [{
+      text: `Analyze patent claim and prior art reference for overlap...`
+    }]
+  }]
+});
 
       if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
