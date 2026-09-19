@@ -49,8 +49,7 @@ function bind(){
   engine.onclick=configureGemini; engine.onkeydown=e=>{if(e.key==='Enter')configureGemini()};
   claim.oninput=updateReady; desc.oninput=updateReady;
   $('#subjectFile').onchange=loadSubject;
-  $('#breakBtn').onclick=()=>openModal('manual','Break Claim Manually','Put one claim limitation per line.',(S.manual.length?S.manual:autoBreak(claim.value)).join('
-'));
+  $('#breakBtn').onclick=()=>openModal('manual','Break Claim Manually','Put one claim limitation per line.',(S.manual.length?S.manual:autoBreak(claim.value)).join(String.fromCharCode(10)));
   $('#instrBtn').onclick=()=>openModal('instructions','Specific Instructions','Examples: strict 102-style mapping, preserve numerical ranges, conservative inference.',S.instructions);
   $('#modalCancel').onclick=()=>$('#modal').close(); $('#modalSave').onclick=saveModal;
   $('#addRef').onclick=()=>{const n=$$('.ref-card').length;if(n<10){renderRefs(n+1,true);log(`Added Reference #${n+1}.`)}};
@@ -66,20 +65,82 @@ async function loadRefFile(e,c,i){const f=e.target.files?.[0];if(!f)return;try{q
 async function readFile(f){const ext=f.name.split('.').pop().toLowerCase();if(ext==='pdf'||f.type==='application/pdf'){const pdfjs=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs');pdfjs.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';const pdf=await pdfjs.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise;let out=[];for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),tc=await page.getTextContent();out.push(`[Page ${p}]\n`+tc.items.map(x=>x.str||'').join(' '))}return out.join('\n\n')}if(ext==='docx'){if(!window.mammoth)await loadScript('https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js');return (await window.mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()})).value||''}return await f.text()}
 function loadScript(src){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>no(new Error('Could not load parser'));document.head.appendChild(s)})}
 function openModal(action,title,help,text){modalAction=action;$('#modalTitle').textContent=title;$('#modalHelp').textContent=help;$('#modalText').value=text||'';$('#modal').showModal()}
-function saveModal(){const v=$('#modalText').value.trim();if(modalAction==='manual'){S.manual=v.split(/?
-/).map(x=>x.trim()).filter(Boolean);$('#manualNote').textContent=S.manual.length?`${S.manual.length} manual limitation(s) will be used.`:'';$('#manualNote').classList.toggle('hidden',!S.manual.length)}else{S.instructions=v;$('#instrNote').textContent=v?`Specific instructions: ${cut(v,150)}`:'';$('#instrNote').classList.toggle('hidden',!v)}$('#modal').close();log(`Saved ${modalAction}.`)}
+function saveModal(){
+  const v=$('#modalText').value.trim();
+  if(modalAction==='manual'){
+    S.manual=v.split(String.fromCharCode(10)).map(x=>x.replace(String.fromCharCode(13),'').trim()).filter(Boolean);
+    $('#manualNote').textContent=S.manual.length?`${S.manual.length} manual limitation(s) will be used.`:'';
+    $('#manualNote').classList.toggle('hidden',!S.manual.length);
+  }else{
+    S.instructions=v;
+    $('#instrNote').textContent=v?`Specific instructions: ${cut(v,150)}`:'';
+    $('#instrNote').classList.toggle('hidden',!v);
+  }
+  $('#modal').close();
+  log(`Saved ${modalAction}.`);
+}
 function updateReady(){const r=collectRefs().filter(x=>x.text);let good=false;if(S.mode==='single')good=!!r[0];if(S.mode==='two')good=r.length>=2;if(S.mode==='three')good=r.length>=3;if(S.mode==='batch')good=r.length>=2;analyze.disabled=!(claim.value.trim()&&good);analyze.classList.toggle('ready',!analyze.disabled)}
-function isPatent(v){v=v.trim();return /patents.google.com/patent//i.test(v)||/^(US|EP|WO|CN|JP|KR|DE|FR|GB|IN|AU|CA|TW|SG|RU|BR|ES|IT|SE|FI|DK|NO|NL|BE|AT|CH|IL|MX|ZA)[s./-]*d{4,}/i.test(v)||/^[A-Z]{1,3}d{6,}[A-Z]d?$/i.test(v.replace(/[s./-]/g,''))}
-function doi(v){const m=v.match(/10.d{4,9}/[-._;()/:A-Z0-9]+/i);return m?m[0].replace(/[).,;]+$/,''):''}
-function arxiv(v){const m=v.match(/(?:arxiv[:/s]*)?(d{4}.d{4,5})(?:vd+)?/i)||v.match(/(?:arxiv[:/s]*)?([a-z-]+/d{7})(?:vd+)?/i);return m?m[1]:''}
-async function fetchRef(c,i){const input=q('.source',c).value.trim(),btn=q('.fetch',c);if(!input)return;btn.disabled=true;btn.textContent='...';try{let d;if(isPatent(input)){log(`Fetching patent ${input}...`);d=await fetchPatent(input)}else if(doi(input)||arxiv(input)){log(`Fetching NPL ${input}...`);d=await fetchNpl({doi:doi(input),arxiv:arxiv(input)})}else{log(`Searching NPL for “${cut(input,60)}”...`);const list=await searchNpl(input,5);if(!list.length)throw new Error('No NPL results found');let idx=0;if(list.length>1){const pick=prompt(list.map((x,j)=>`${j+1}. ${x.title} (${x.year||''})`).join('\n')+'\n\nChoose result number:','1');idx=Math.max(0,Math.min(list.length-1,(Number(pick)||1)-1))}d=await fetchNpl(list[idx])}q('.ref-text',c).value=d.text||'';q('.meta',c).textContent=d.title||'';c.dataset.title=d.title||'';c.dataset.url=d.url||'';c.dataset.type=d.type||'';log(`Fetched Reference #${i+1}: ${cut(d.title,80)}`);updateReady()}catch(x){log(`Fetch failed: ${x.message}`);alert(x.message+'\n\nYou can upload or paste the document manually.')}finally{btn.disabled=false;btn.textContent='Fetch'}}
-function normPatent(input){let r=input.trim();const m=r.match(/patents.google.com/patent/([^/?#]+)/i);if(m)r=decodeURIComponent(m[1]);r=r.toUpperCase().replace(/^PATENTs*/,'').replace(/[s,._/-]+/g,'');return /^[A-Z]{1,3}d{4,}[A-Z0-9]*$/.test(r)?r:''}
-async function reader(url){let last='';for(const u of [`https://r.jina.ai/${url}`,`https://r.jina.ai/http://${url.replace(/^https?:///,'')}`]){try{const r=await fetch(u);if(r.ok){const t=await r.text();if(t.length>100)return t}else last=`HTTP ${r.status}`}catch(e){last=e.message}}throw new Error(`Public reader failed${last?' ('+last+')':''}`)}
-async function fetchPatent(input){const p=normPatent(input);if(!p)throw new Error('Patent number not recognized');const url=`https://patents.google.com/patent/${p}/en`,text=await reader(url),title=(text.match(/^Title:s*(.+)$/mi)||text.match(/^#s+(.+)$/m)||[])[1]||p;return{title:`${p} — ${title.replace(/s+-s+Google Patentss*$/i,'').trim()}`,url,type:'patent',text:text.slice(0,300000)}}
+function cleanToken(v){return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'')}
+function isPatent(v){
+  const raw=String(v||'').trim();
+  if(raw.toLowerCase().includes('patents.google.com/patent/')) return true;
+  const t=cleanToken(raw);
+  const prefixes=['US','EP','WO','CN','JP','KR','DE','FR','GB','IN','AU','CA','TW','SG','RU','BR','ES','IT','SE','FI','DK','NO','NL','BE','AT','CH','IL','MX','ZA'];
+  return prefixes.some(p=>t.startsWith(p) && /[0-9]/.test(t.slice(p.length)));
+}
+function doi(v){
+  const s=String(v||'').trim();
+  const i=s.toLowerCase().indexOf('10.');
+  if(i<0)return '';
+  const tail=s.slice(i).split(/\s/)[0];
+  return tail.includes('/')?tail.replace(/[),.;]+$/,''):'';
+}
+function arxiv(v){
+  const s=String(v||'').trim();
+  const low=s.toLowerCase();
+  const i=low.indexOf('arxiv:');
+  if(i>=0)return s.slice(i+6).trim().split(/\s/)[0].replace(/[),.;]+$/,'');
+  const m=s.match(/[0-9]{4}[.][0-9]{4,5}/);
+  return m?m[0]:'';
+}
+async function fetchRef(c,i){const input=q('.source',c).value.trim(),btn=q('.fetch',c);if(!input)return;btn.disabled=true;btn.textContent='...';try{let d;if(isPatent(input)){log(`Fetching patent ${input}...`);d=await fetchPatent(input)}else if(doi(input)||arxiv(input)){log(`Fetching NPL ${input}...`);d=await fetchNpl({doi:doi(input),arxiv:arxiv(input)})}else{log(`Searching NPL for “${cut(input,60)}”...`);const list=await searchNpl(input,5);if(!list.length)throw new Error('No NPL results found');let idx=0;if(list.length>1){const pick=prompt(list.map((x,j)=>`${j+1}. ${x.title} (${x.year||''})`).join(String.fromCharCode(10))+String.fromCharCode(10)+'Choose result number:','1');idx=Math.max(0,Math.min(list.length-1,(Number(pick)||1)-1))}d=await fetchNpl(list[idx])}q('.ref-text',c).value=d.text||'';q('.meta',c).textContent=d.title||'';c.dataset.title=d.title||'';c.dataset.url=d.url||'';c.dataset.type=d.type||'';log(`Fetched Reference #${i+1}: ${cut(d.title,80)}`);updateReady()}catch(x){log(`Fetch failed: ${x.message}`);alert(x.message+String.fromCharCode(10)+String.fromCharCode(10)+'You can upload or paste the document manually.')}finally{btn.disabled=false;btn.textContent='Fetch'}}
+function normPatent(input){
+  let r=String(input||'').trim();
+  const marker='patents.google.com/patent/';
+  const pos=r.toLowerCase().indexOf(marker);
+  if(pos>=0){r=r.slice(pos+marker.length).split('/')[0].split('?')[0].split('#')[0]}
+  r=cleanToken(r.replace(/^PATENT/i,''));
+  return isPatent(r)?r:'';
+}
+async function reader(url){
+  let bare=String(url||'');
+  const sep=bare.indexOf('://');
+  if(sep>=0)bare=bare.slice(sep+3);
+  let last='';
+  for(const u of ['https://r.jina.ai/'+url,'https://r.jina.ai/http://'+bare]){
+    try{const r=await fetch(u);if(r.ok){const t=await r.text();if(t.length>100)return t}else last='HTTP '+r.status}catch(e){last=e.message}
+  }
+  throw new Error('Public reader failed'+(last?' ('+last+')':''));
+}
+async function fetchPatent(input){
+  const p=normPatent(input);
+  if(!p)throw new Error('Patent number not recognized');
+  const url='https://patents.google.com/patent/'+p+'/en';
+  const text=await reader(url);
+  const lines=text.split(String.fromCharCode(10));
+  let title=p;
+  for(const line of lines){const trimmed=line.trim();if(trimmed.toLowerCase().startsWith('title:')){title=trimmed.slice(6).trim();break}if(trimmed.startsWith('# ')){title=trimmed.slice(2).trim();break}}
+  title=title.replace(' - Google Patents','').trim();
+  return{title:p+' — '+title,url,type:'patent',text:text.slice(0,300000)};
+}
 function abs(inv){if(!inv)return'';const a=[];Object.entries(inv).forEach(([w,ps])=>(ps||[]).forEach(p=>a[p]=w));return a.filter(Boolean).join(' ')}
-function mapWork(w){const d=String(w.doi||'').replace(/^https?://(dx.)?doi.org//i,'');return{openAlexId:w.id||'',doi:d,title:w.title||w.display_name||'',year:w.publication_year||'',authors:(w.authorships||[]).map(a=>a.author?.display_name).filter(Boolean),abstract:abs(w.abstract_inverted_index),url:d?`https://doi.org/${d}`:(w.primary_location?.landing_page_url||w.id||''),type:'npl'}}
-async function searchNpl(query,n=5){const r=await fetch(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${n}`);if(!r.ok)throw new Error(`OpenAlex HTTP ${r.status}`);return (await r.json()).results.map(mapWork)}
-async function fetchNpl(x){if(x.arxiv){const url=`https://arxiv.org/abs/${x.arxiv}`,text=await reader(url).catch(()=>''),title=(text.match(/^Title:s*(.+)$/mi)||[])[1]||`arXiv:${x.arxiv}`;return{title,url,type:'npl',text:text||title}}let item=x;if(x.openAlexId){const id=x.openAlexId.split('/').pop(),r=await fetch(`https://api.openalex.org/works/${id}`);if(r.ok)item=mapWork(await r.json())}else if(x.doi){const list=await searchNpl(x.doi,1);if(list[0])item=list[0]}let full='';if(item.url)full=await reader(item.url).catch(()=>'');const meta=[`Title: ${item.title||''}`,item.year&&`Year: ${item.year}`,item.authors?.length&&`Authors: ${item.authors.join(', ')}`,item.doi&&`DOI: ${item.doi}`,item.abstract&&`Abstract:\n${item.abstract}`].filter(Boolean).join('\n\n');return{...item,type:'npl',text:(full.length>300?full:meta).slice(0,300000)}}
+function mapWork(w){
+  let d=String(w.doi||'');
+  ['https://doi.org/','http://doi.org/','https://dx.doi.org/','http://dx.doi.org/'].forEach(prefix=>{if(d.toLowerCase().startsWith(prefix))d=d.slice(prefix.length)});
+  return{openAlexId:w.id||'',doi:d,title:w.title||w.display_name||'',year:w.publication_year||'',authors:(w.authorships||[]).map(a=>a.author?.display_name).filter(Boolean),abstract:abs(w.abstract_inverted_index),url:d?'https://doi.org/'+d:(w.primary_location?.landing_page_url||w.id||''),type:'npl'};
+}
+async function searchNpl(query,n=5){const r=await fetch('https://api.openalex.org/works?search='+encodeURIComponent(query)+'&per-page='+n);if(!r.ok)throw new Error(`OpenAlex HTTP ${r.status}`);return (await r.json()).results.map(mapWork)}
+async function fetchNpl(x){if(x.arxiv){const url='https://arxiv.org/abs/'+x.arxiv,text=await reader(url).catch(()=>''),title=(text.split(String.fromCharCode(10)).find(line=>line.toLowerCase().startsWith('title:'))||'').replace(/^title:/i,'').trim()||'arXiv:'+x.arxiv;return{title,url,type:'npl',text:text||title}}let item=x;if(x.openAlexId){const id=x.openAlexId.split('/').pop(),r=await fetch('https://api.openalex.org/works/'+id);if(r.ok)item=mapWork(await r.json())}else if(x.doi){const list=await searchNpl(x.doi,1);if(list[0])item=list[0]}let full='';if(item.url)full=await reader(item.url).catch(()=>'');const meta=[`Title: ${item.title||''}`,item.year&&`Year: ${item.year}`,item.authors?.length&&`Authors: ${item.authors.join(', ')}`,item.doi&&`DOI: ${item.doi}`,item.abstract&&`Abstract: ${item.abstract}`].filter(Boolean).join(String.fromCharCode(10)+String.fromCharCode(10));return{...item,type:'npl',text:(full.length>300?full:meta).slice(0,300000)}}
 function refreshEngine(){const k=localStorage.getItem('nexusGeminiKey'),m=localStorage.getItem('nexusGeminiModel')||'gemini-2.5-flash';engine.textContent=k?`Gemini · ${m}`:'Configure Gemini';engine.title=k?'Key stored only in this browser. Click to change.':'Click to enter a Gemini API key.'}
 function configureGemini(){const old=localStorage.getItem('nexusGeminiKey')||'',k=prompt('Enter your Gemini API key. It is stored only in this browser and is not committed to GitHub.',old);if(k===null)return;if(k.trim())localStorage.setItem('nexusGeminiKey',k.trim());else localStorage.removeItem('nexusGeminiKey');const m=prompt('Gemini model:',localStorage.getItem('nexusGeminiModel')||'gemini-2.5-flash');if(m?.trim())localStorage.setItem('nexusGeminiModel',m.trim());refreshEngine();log(k.trim()?'Gemini configuration saved in this browser.':'Gemini key cleared.');}
 async function runAnalysis(){if(analyze.disabled)return;const rs=collectRefs().filter(x=>x.text),input={claim:claim.value.trim(),desc:desc.value.trim(),mode:S.mode,manual:S.manual,instructions:S.instructions,refs:rs};setBusy(true);log(`Starting ${S.mode} analysis with ${rs.length} reference(s).`);try{let data=await analyzeInput(input);S.result=data;renderResult(data,rs);$('#results').classList.remove('hidden');if($('#autohide').checked){$('#subjectBody').classList.add('collapsed');$('#refBody').classList.add('collapsed')}$('#results').scrollIntoView({behavior:'smooth'});log(`Analysis completed using ${data.engine}.`)}catch(e){log(`Analysis failed: ${e.message}`);alert(e.message)}finally{setBusy(false)}}
