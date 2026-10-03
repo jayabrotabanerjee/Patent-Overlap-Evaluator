@@ -85,18 +85,6 @@ function searchUp(node) {
 return searchUp(el);
 """
 
-JS_FIND_LARGEST_IMAGE_SRC = r"""
-var imgs = Array.from(document.images || []);
-var candidates = imgs.filter(function(i) {
-    return i && i.src && (i.src.startsWith('blob:') || i.src.startsWith('data:image/'));
-});
-candidates.sort(function(a,b) {
-    return ((b.naturalWidth||b.width||0)*(b.naturalHeight||b.height||0)) -
-           ((a.naturalWidth||a.width||0)*(a.naturalHeight||a.height||0));
-});
-return candidates.length ? candidates[0].src : null;
-"""
-
 JS_FETCH_AS_DATA_URL = r"""
 var url = arguments[0];
 var callback = arguments[arguments.length - 1];
@@ -503,16 +491,6 @@ def capture_translated_image(
     if href:
         bridge_log("Download element exposes a direct href; attempting in-page capture.", job_id=job_id)
         result = fetch_url_as_file(driver, href, out_path_no_ext, job_id)
-        if result is not None:
-            return result
-
-    try:
-        image_src = driver.execute_script(JS_FIND_LARGEST_IMAGE_SRC)
-    except Exception:
-        image_src = None
-    if image_src:
-        bridge_log("Found translated image/blob in page; attempting direct capture before clicking Download.", job_id=job_id)
-        result = fetch_url_as_file(driver, image_src, out_path_no_ext, job_id)
         if result is not None:
             return result
 
