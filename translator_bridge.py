@@ -13,6 +13,7 @@ import threading
 import time
 import traceback
 import uuid
+import webbrowser
 from pathlib import Path
 
 import fitz
@@ -242,6 +243,86 @@ def diagnostics_payload():
         "port": PORT,
     }
 
+
+
+LOCAL_TRANSLATOR_HTML = r"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Patent Overlap Evaluator - Local PDF Translator</title>
+<style>
+body{font-family:Segoe UI,Arial,sans-serif;background:#eef6fa;color:#17394a;margin:0;padding:24px}
+.wrap{max-width:920px;margin:auto}.card{background:#fff;border:1px solid #b7d7e6;border-radius:10px;padding:18px;box-shadow:0 5px 22px rgba(0,50,75,.08)}
+h1{margin:0 0 4px;color:#0b557d;font-size:24px}p{color:#5c7f91;font-size:13px;line-height:1.5}
+.row{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:12px 0}label{font-size:12px;color:#315f77;font-weight:600}
+select,input[type=file]{display:block;margin-top:5px}select{height:34px;border:1px solid #9fcbe0;border-radius:5px;padding:0 8px;background:#fff}
+button,a.btn{border:1px solid #6caed0;background:#eaf7fd;color:#0b608b;border-radius:6px;padding:8px 12px;font-weight:600;font-size:12px;cursor:pointer;text-decoration:none}
+button.primary{background:#0b668f;color:#fff}button:disabled{opacity:.45;cursor:not-allowed}
+progress{width:100%;height:14px}.status{margin-top:10px;background:#edf8fd;padding:10px;border-radius:6px;white-space:pre-wrap;font-size:12px}
+.logs{height:310px;overflow:auto;background:#102a38;color:#d7edf7;padding:10px;border-radius:6px;font:11px/1.5 Consolas,monospace;white-space:pre-wrap;margin-top:12px}
+.badge{display:inline-block;background:#dff5e8;color:#17733f;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:700}
+.small{font-size:11px;color:#6a8797}.err{background:#fff1ef;color:#8a3e37}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+<h1>Local PDF Translator</h1>
+<div class="badge">Bridge Connected</div>
+<p>This page runs on the same local bridge as Selenium, so it avoids GitHub Pages-to-localhost browser restrictions. A visible Chrome window will open automatically for translation.</p>
+<div class="row">
+<label>PDF<input id="file" type="file" accept=".pdf,application/pdf"></label>
+<label>Source<select id="source"><option value="auto">Auto-detect</option><option value="en">English</option><option value="zh-CN">Chinese (Simplified)</option><option value="zh-TW">Chinese (Traditional)</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option><option value="it">Italian</option><option value="nl">Dutch</option><option value="pt">Portuguese</option><option value="ru">Russian</option><option value="ar">Arabic</option><option value="hi">Hindi</option></select></label>
+<label>Target<select id="target"><option value="en">English</option><option value="zh-CN">Chinese (Simplified)</option><option value="zh-TW">Chinese (Traditional)</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option><option value="it">Italian</option><option value="nl">Dutch</option><option value="pt">Portuguese</option><option value="ru">Russian</option><option value="ar">Arabic</option><option value="hi">Hindi</option></select></label>
+<button id="start" class="primary" disabled>Translate PDF</button>
+<button id="cancel" disabled>Cancel</button>
+<a id="download" class="btn" href="#" style="display:none">Download Translated PDF</a>
+</div>
+<progress id="progress" max="1" value="0"></progress>
+<div id="count" class="small">0 / 0</div>
+<div id="status" class="status">Ready. Choose a PDF.</div>
+<div id="logs" class="logs">Bridge event logs will appear here.</div>
+</div></div>
+<script>
+(function(){
+let file=null,job=null,timer=null;
+const $=s=>document.querySelector(s);
+$("#file").onchange=e=>{file=e.target.files&&e.target.files[0]||null;$("#start").disabled=!file;$("#status").textContent=file?"Selected: "+file.name:"Ready. Choose a PDF."};
+$("#start").onclick=async()=>{
+ if(!file)return;
+ $("#start").disabled=true;$("#cancel").disabled=false;$("#download").style.display="none";
+ const fd=new FormData();fd.append("file",file,file.name);fd.append("source_lang",$("#source").value);fd.append("target_lang",$("#target").value);
+ try{
+   const r=await fetch("/api/translate",{method:"POST",body:fd});const j=await r.json();
+   if(!r.ok)throw new Error(j.error||("HTTP "+r.status));
+   job=j.job_id;poll();
+ }catch(e){$("#status").textContent="Start failed: "+e.message;$("#status").classList.add("err");$("#start").disabled=false;$("#cancel").disabled=true}
+};
+$("#cancel").onclick=async()=>{if(job)await fetch("/api/jobs/"+job+"/cancel",{method:"POST"})};
+async function poll(){
+ if(!job)return;
+ try{
+  const r=await fetch("/api/jobs/"+job,{cache:"no-store"});const j=await r.json();if(!r.ok)throw new Error(j.error||("HTTP "+r.status));
+  const total=Number(j.total_pages||0),done=Number(j.progress||0);$("#progress").max=Math.max(1,total);$("#progress").value=done;$("#count").textContent=done+" / "+total;
+  const logs=Array.isArray(j.logs)?j.logs:[];$("#logs").textContent=logs.join("\\n")||"Waiting for events...";$("#logs").scrollTop=$("#logs").scrollHeight;
+  $("#status").textContent=(j.status||"").replace(/_/g," ")+" · "+(logs.length?logs[logs.length-1]:"");
+  if(j.status==="done"){
+    $("#start").disabled=false;$("#cancel").disabled=true;$("#download").href="/api/jobs/"+job+"/download";$("#download").style.display="inline-block";return;
+  }
+  if(j.status==="error"||j.status==="cancelled"){
+    $("#start").disabled=false;$("#cancel").disabled=true;if(j.status==="error")$("#status").classList.add("err");return;
+  }
+  timer=setTimeout(poll,900);
+ }catch(e){$("#status").textContent="Polling failed: "+e.message;$("#status").classList.add("err");$("#start").disabled=false;$("#cancel").disabled=true}
+}
+})();
+</script>
+</body>
+</html>"""
+
+
+@app.route("/translator", methods=["GET"])
+def local_translator():
+    return LOCAL_TRANSLATOR_HTML
 
 @app.route("/health", methods=["GET", "OPTIONS"])
 def health():
@@ -969,4 +1050,5 @@ if __name__ == "__main__":
     bridge_log(f"Listening on http://{HOST}:{PORT}")
     bridge_log("Event log file: " + str(LOG_PATH))
     bridge_log("============================================================")
+    threading.Timer(1.5, lambda: webbrowser.open(f"http://{HOST}:{PORT}/translator")).start()
     app.run(host=HOST, port=PORT, threaded=True, use_reloader=False)
