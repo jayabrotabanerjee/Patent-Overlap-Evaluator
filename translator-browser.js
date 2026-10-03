@@ -7,6 +7,7 @@ var T={
   pollTimer:null,
   bridge:"http://127.0.0.1:8765",
   downloadUrl:null,
+  healthTimer:null,
   lastLogs:[],
   clientLogs:[]
 };
@@ -61,7 +62,7 @@ function connectionHint(error){
 }
 async function checkBridge(showMessage){
   var base=bridgeBase();
-  clientLog("Checking local bridge at "+base+"...");
+  if(showMessage)clientLog("Checking local bridge at "+base+"...");
   try{
     var r=await fetch(base+"/api/diagnostics",{method:"GET",cache:"no-store"});
     var j=await r.json();
@@ -78,7 +79,7 @@ async function checkBridge(showMessage){
     ].filter(Boolean).join(" · ");
 
     markBridge(true,showMessage?"Local bridge connected. "+details:null);
-    clientLog("Bridge connected. "+details);
+    if(showMessage)clientLog("Bridge connected. "+details);
     if(!j.chrome_found){
       setStatus("Bridge is running, but Google Chrome was not found. Install Chrome or set CHROME_PATH, then restart the bridge.",true);
     }
@@ -86,7 +87,7 @@ async function checkBridge(showMessage){
   }catch(e){
     var hint=connectionHint(e);
     markBridge(false,showMessage?hint:null);
-    clientLog("Bridge check failed: "+hint,"ERROR");
+    if(showMessage)clientLog("Bridge check failed: "+hint,"ERROR");
     return false;
   }
 }
@@ -230,6 +231,8 @@ function copyLogs(){
 async function refreshDiagnostics(){
   await checkBridge(true);
 }
+function openLocalTranslator(){window.open(bridgeBase()+"/translator","_blank","noopener")}
+function startHealthLoop(){if(T.healthTimer)clearInterval(T.healthTimer);T.healthTimer=setInterval(function(){checkBridge(false)},4000)}
 function bind(){
   if(!$("#documentTranslator"))return;
 
@@ -247,7 +250,7 @@ function bind(){
   $("#translateStart").onclick=startTranslation;
   $("#translateCancel").onclick=cancelJob;
   $("#translateDownload").onclick=downloadResult;
-  $("#translateCheckBridge").onclick=function(){checkBridge(true)};
+  if($("#translateCheckBridge"))$("#translateCheckBridge").onclick=function(){checkBridge(true)}; if($("#translateOpenLocal"))$("#translateOpenLocal").onclick=openLocalTranslator;
   $("#translateBridgeUrl").onchange=function(){bridgeBase();checkBridge(false)};
   $("#translateCopyLogs").onclick=copyLogs;
   $("#translateRefreshLogs").onclick=refreshDiagnostics;
@@ -255,6 +258,7 @@ function bind(){
 
   renderEventLogs();
   checkBridge(false);
+  startHealthLoop();
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bind);else bind();
 })();
