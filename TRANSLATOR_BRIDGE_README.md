@@ -15,10 +15,11 @@ The current bridge intentionally follows the workflow extracted from the supplie
 7. A trusted **Ctrl+V** is dispatched through Chrome DevTools Protocol.
 8. The bridge waits for **Download translation**.
 9. The translated image is captured using, in order:
-   - a direct href exposed by the download control;
-   - a translated blob/data-image already present in the page;
-   - a new blob URL created after the download click;
+   - a direct href exposed by the **Download translation** control;
+   - the newly generated blob URL created by the download action;
    - the actual Chrome download directory as a final fallback.
+
+The bridge does **not** accept the largest image already visible on the page as translated output, because that can be the untranslated preview image.
 10. The same steps run **sequentially for page 2, page 3, and so on**.
 11. A failed page is retried up to **3 times**, with a **3-second retry backoff**.
 12. There is a **2-second delay between pages**.
