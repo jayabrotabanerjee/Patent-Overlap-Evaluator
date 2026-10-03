@@ -46,7 +46,7 @@ function bind(){
   $$('#analysisModes .mode').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
   $$('.collapse').forEach(b=>b.onclick=()=>{const t=$('#'+b.dataset.target);t.classList.toggle('collapsed');b.textContent=t.classList.contains('collapsed')?'⌄':'⌃'});
   $('#compact').onclick=()=>document.body.classList.toggle('compact');
-  engine.onclick=configureGemini; engine.onkeydown=e=>{if(e.key==='Enter')configureGemini()}; modelSelect.onchange=()=>{localStorage.setItem('patentOverlapEvaluatorGeminiModel',modelSelect.value);refreshEngine();log('Primary Gemini model selected: '+modelSelect.options[modelSelect.selectedIndex].text+'.')}; window.addEventListener('poe-ai-event',e=>{const d=e.detail||{};log('AI Router: '+(d.message||''))});
+  engine.onclick=configureGemini; engine.onkeydown=e=>{if(e.key==='Enter')configureGemini()}; modelSelect.onchange=()=>{localStorage.setItem('patentOverlapEvaluatorGeminiModel',modelSelect.value);refreshEngine();log('Primary Gemini model selected: '+modelSelect.options[modelSelect.selectedIndex].text+'.')}; window.addEventListener('poe-ai-event',e=>{const d=e.detail||{};log('AI Router: '+(d.message||''));refreshEngine()});
   claim.oninput=updateReady; desc.oninput=updateReady;
   $('#subjectFile').onchange=loadSubject;
   $('#breakBtn').onclick=()=>openModal('manual','Break Claim Manually','Put one claim limitation per line.',(S.manual.length?S.manual:autoBreak(claim.value)).join(String.fromCharCode(10)));
